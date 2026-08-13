@@ -7,6 +7,8 @@ interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
   TIKHUB_API_KEY?: string;
+  FALLBACK_CRAWLER_URL?: string;
+  FALLBACK_CRAWLER_TOKEN?: string;
   LLM_API_KEY?: string;
   LLM_BASE_URL?: string;
   LLM_MODEL?: string;
@@ -40,6 +42,7 @@ const worker = {
 
     if (url.pathname === "/api/tikhub/status") return tikhubStatus(env);
     if (url.pathname === "/api/runtime/status") return Response.json({ mode: env.APP_MODE === "live" ? "live" : "mock", aiProvider: env.AI_PROVIDER ?? "mock", tianmuAuthorPoolUrl: env.TIANMU_AUTHOR_POOL_URL ?? "" });
+    if (url.pathname === "/api/logs" && request.method === "GET") return listLogs(env.DB, url);
     if (url.pathname === "/api/tasks" && request.method === "GET") return listTasks(env.DB);
     if (url.pathname === "/api/tasks" && request.method === "POST") return createTask(request, env, ctx);
     if (url.pathname === "/api/creators" && request.method === "GET") return listCreators(env.DB);
@@ -96,6 +99,19 @@ async function listTasks(db: D1Database) {
 async function listCreators(db: D1Database) {
   const result = await db.prepare("SELECT c.id,c.douyin_account,c.nickname,c.profile_url,c.bio,c.follower_count,c.total_likes,c.tianmu_status,c.final_status,c.profile_status,c.evidence_level,c.evidence_warnings,c.profile_retry_count,a.main_category,a.content_verticality,a.target_content_ratio,a.repost_risk,a.recommendation,a.reasoning,a.is_emerging_creator,d.keyword FROM creators c LEFT JOIN creator_analyses a ON a.creator_id=c.id LEFT JOIN creator_discoveries d ON d.creator_id=c.id GROUP BY c.id ORDER BY c.first_discovered_at DESC LIMIT 500").all() as { results?: unknown[] };
   return Response.json({ creators: result.results ?? [] });
+}
+
+async function listLogs(db: D1Database, url: URL) {
+  const level = url.searchParams.get("level");
+  const taskId = url.searchParams.get("taskId");
+  const limit = clamp(Number(url.searchParams.get("limit") ?? 100), 1, 300, 100);
+  const conditions: string[] = []; const values: unknown[] = [];
+  if (level && ["INFO", "WARN", "ERROR"].includes(level)) { conditions.push("l.level=?"); values.push(level); }
+  if (taskId) { conditions.push("l.task_id=?"); values.push(taskId); }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const result = await db.prepare(`SELECT l.id,l.task_id,l.creator_id,l.level,l.module,l.action,l.message,l.metadata,l.created_at,t.name AS task_name FROM task_logs l LEFT JOIN search_tasks t ON t.id=l.task_id ${where} ORDER BY l.created_at DESC LIMIT ?`).bind(...values, limit).all() as { results?: unknown[] };
+  const summary = await db.prepare("SELECT level,COUNT(*) AS count FROM task_logs GROUP BY level").all() as { results?: Array<{ level: string; count: number }> };
+  return Response.json({ logs: result.results ?? [], summary: Object.fromEntries((summary.results ?? []).map((row) => [row.level, row.count])) });
 }
 
 async function shadowReport(db: D1Database, url: URL) {

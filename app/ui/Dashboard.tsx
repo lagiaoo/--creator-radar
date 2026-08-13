@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { creators as initialCreators, logs, tasks as initialTasks } from "../../lib/mock-data";
+import { creators as initialCreators, logs as mockLogs, tasks as initialTasks } from "../../lib/mock-data";
 import {
   CREATOR_FILTERS_STORAGE_KEY,
   DEFAULT_CREATOR_FILTERS,
@@ -18,6 +18,7 @@ type RuntimeStatus = { mode: "live" | "mock"; aiProvider: string; tianmuAuthorPo
 type ApiTask = Record<string, unknown>;
 type TaskResultRow = { id: string; nickname: string; douyin_account: string; main_category: string; keyword: string; recommendation: Recommendation; tianmu_status: TianmuStatus; final_status: Creator["finalStatus"]; content_verticality: number; reasoning: string };
 type TianmuPendingRow = { id: string; nickname: string; douyin_account: string; profile_url: string; main_category: string; reasoning: string };
+type ApiLog = { id: string; task_id?: string; task_name?: string; creator_id?: string; level: "INFO" | "WARN" | "ERROR"; module: string; action: string; message: string; metadata?: string; created_at: string };
 
 const navItems: { id: View; label: string; icon: string }[] = [
   { id: "overview", label: "工作概览", icon: "⌂" },
@@ -438,7 +439,7 @@ export function Dashboard() {
               showToast("天牧核验结果已回写");
             }} />
           )}
-          {view === "logs" && <Logs />}
+          {view === "logs" && <Logs mockMode={runtimeStatus.mode === "mock"} />}
           {view === "detail" && selectedCreator && (
             <CreatorDetail
               creator={selectedCreator}
@@ -1202,22 +1203,56 @@ function CRMWorkspace({
   );
 }
 
-function Logs() {
+function Logs({ mockMode }: { mockMode: boolean }) {
+  const [rows, setRows] = useState<ApiLog[]>([]);
+  const [level, setLevel] = useState("ALL");
+  const [loading, setLoading] = useState(!mockMode);
+  const [error, setError] = useState("");
+
+  async function refresh() {
+    if (mockMode) return;
+    setLoading(true); setError("");
+    try {
+      const query = level === "ALL" ? "" : `?level=${level}`;
+      const response = await fetch(`/api/logs${query}`);
+      const payload = await response.json() as { logs?: ApiLog[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || "日志读取失败");
+      setRows(payload.logs ?? []);
+    } catch (readError) { setError(readError instanceof Error ? readError.message : "日志读取失败"); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => {
+    if (mockMode) return;
+    let active = true;
+    const query = level === "ALL" ? "" : `?level=${level}`;
+    fetch(`/api/logs${query}`)
+      .then(async (response) => { const payload = await response.json() as { logs?: ApiLog[]; error?: string }; if (!response.ok) throw new Error(payload.error || "日志读取失败"); return payload.logs ?? []; })
+      .then((logs) => { if (active) { setRows(logs); setError(""); } })
+      .catch((readError) => { if (active) setError(readError instanceof Error ? readError.message : "日志读取失败"); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [level, mockMode]);
+  const visible = mockMode ? mockLogs : rows.map((row) => ({ id: row.id, time: new Date(row.created_at).toLocaleString("zh-CN"), level: row.level, module: row.task_name || row.module, action: row.action, message: row.message }));
   return (
     <>
       <PageHead title="运行日志" copy="所有关键步骤都保留结果；异常不会静默跳过。" />
       <section className="card">
         <div className="card-head">
-          <div><div className="card-title">最近事件</div><div className="card-sub">Mock 任务日志</div></div>
-          <span className="badge badge-green">系统正常</span>
+          <div><div className="card-title">最近事件</div><div className="card-sub">{mockMode ? "Mock 演示日志" : "来自 D1 的真实任务执行记录"}</div></div>
+          <div className="task-actions">
+            <select className="field" value={level} onChange={(event) => setLevel(event.target.value)} disabled={mockMode} aria-label="日志级别"><option value="ALL">全部级别</option><option value="INFO">INFO</option><option value="WARN">WARN</option><option value="ERROR">ERROR</option></select>
+            <button className="btn" onClick={() => void refresh()} disabled={mockMode || loading}>↻ 刷新</button>
+          </div>
         </div>
-        {logs.map((log) => (
+        {error && <div className="notice"><strong>日志读取失败：</strong>{error}</div>}
+        {loading ? <div className="empty-state">正在读取真实运行日志…</div> : visible.length === 0 ? <div className="empty-state">暂无运行日志。创建并运行搜索任务后会在这里显示。</div> : visible.map((log) => (
           <div className="log-row" key={log.id}>
             <span className="log-time">{log.time}</span>
             <span className={`badge ${log.level === "INFO" ? "badge-green" : log.level === "WARN" ? "badge-amber" : "badge-red"}`}>{log.level}</span>
             <strong>{log.module}</strong>
             <span>{log.message}</span>
-            <button className="btn btn-quiet">{log.level === "ERROR" ? "重试" : "查看"}</button>
+            <span className="badge badge-gray">{log.action}</span>
           </div>
         ))}
       </section>
