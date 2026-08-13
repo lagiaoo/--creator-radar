@@ -1,0 +1,2 @@
+CREATE INDEX `idx_creator_shadow_task_created` ON `creator_shadow_evaluations` (`task_id`,`created_at`);--> statement-breakpoint
+CREATE INDEX `idx_creator_shadow_creator` ON `creator_shadow_evaluations` (`creator_id`);

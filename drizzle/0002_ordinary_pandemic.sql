@@ -1,0 +1,1 @@
+ALTER TABLE `search_tasks` ADD `target_requirement` text DEFAULT '' NOT NULL;

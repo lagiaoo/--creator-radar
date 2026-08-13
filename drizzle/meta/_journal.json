@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1785137209365,
+      "tag": "0000_lush_madame_web",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786504839432,
+      "tag": "0001_tired_domino",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786505839619,
+      "tag": "0002_ordinary_pandemic",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1786507078604,
+      "tag": "0003_pale_red_hulk",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1786519952324,
+      "tag": "0004_keen_liz_osborn",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1786519985305,
+      "tag": "0005_slippery_anthem",
+      "breakpoints": true
+    }
+  ]
+}
